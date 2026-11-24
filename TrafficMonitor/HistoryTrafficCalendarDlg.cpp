@@ -271,7 +271,8 @@ void CHistoryTrafficCalendarDlg::OnPaint()
                 frame_color = RGB(218, 91, 91);
             else
                 frame_color = RGB(1, 133, 238);
-            if (m_year == m_history_traffics[0].year && m_month == m_history_traffics[0].month && m_calendar[i][j].day == m_history_traffics[0].day)
+            const auto today = CTime::GetCurrentTime();
+            if (m_year == today.GetYear() && m_month == today.GetMonth() && m_calendar[i][j].day == today.GetDay())
                 draw.DrawRectOutLine(rect, frame_color, theApp.DPI(2));
 
             //绘制指示流量大小的矩形
@@ -551,8 +552,9 @@ void CHistoryTrafficCalendarDlg::OnFirstDayOfWeekMonday()
 void CHistoryTrafficCalendarDlg::OnCalendarJumpToToday()
 {
     // TODO: 在此添加命令处理程序代码
-    m_year = m_history_traffics[0].year;
-    m_month = m_history_traffics[0].month;
+    const auto today = CTime::GetCurrentTime();
+    m_year = today.GetYear();
+    m_month = today.GetMonth();
     SetComboSel();
     MonthSelectChanged();
 

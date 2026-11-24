@@ -66,7 +66,7 @@ void CHistoryTrafficListDlg::AddListRow(const ListRowData& data, unsigned __int6
     }
     m_history_list.SetItemText(index, 3, CCommon::KBytesToString(total_kbytes));
 
-    double range = static_cast<double>(total_kbytes) * 1000 / max_traffic;
+    double range = max_traffic ? static_cast<double>(total_kbytes) * 1000 / max_traffic : 0.0;
     COLORREF color;
     if (total_kbytes < 1024 * 1024)		//流量小于1GB时绘制蓝色
         color = TRAFFIC_COLOR_BLUE;
@@ -175,12 +175,6 @@ void CHistoryTrafficListDlg::ShowListData()
             }
             if (list_data.empty() || list_data.back().str != date_str)
             {
-                if(!list_data.empty())
-                {
-                    unsigned __int64 cur_traffic{ list_data.back().up_kBytes + list_data.back().down_kBytes };
-                    if (cur_traffic > max_traffic)
-                        max_traffic = cur_traffic;
-                }
                 ListRowData data;
                 data.str = date_str;
                 data.up_kBytes = traffic.up_kBytes;
@@ -194,6 +188,8 @@ void CHistoryTrafficListDlg::ShowListData()
             }
         }
 
+        for (const auto& data : list_data)
+            max_traffic = (std::max)(max_traffic, data.up_kBytes + data.down_kBytes);
         for (const auto& data : list_data)
         {
             AddListRow(data, max_traffic);

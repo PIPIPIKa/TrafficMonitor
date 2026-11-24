@@ -11,8 +11,9 @@
 
 IMPLEMENT_DYNAMIC(CHistoryTrafficDlg, CBaseDialog)
 
-CHistoryTrafficDlg::CHistoryTrafficDlg(deque<HistoryTraffic>& history_traffics, CWnd* pParent /*=NULL*/)
-    : CBaseDialog(IDD_HISTORY_TRAFFIC_DIALOG, pParent), m_history_traffics(history_traffics), m_tab1_dlg(history_traffics, this), m_tab2_dlg(history_traffics, this)
+CHistoryTrafficDlg::CHistoryTrafficDlg(const deque<HistoryTraffic>& history_traffics, bool captureActive, CWnd* pParent /*=NULL*/)
+    : CBaseDialog(IDD_HISTORY_TRAFFIC_DIALOG, pParent), m_source(history_traffics), m_filtered(history_traffics),
+      m_captureActive(captureActive), m_tab1_dlg(m_filtered, this), m_tab2_dlg(m_filtered, this)
 {
 
 }
@@ -31,6 +32,7 @@ void CHistoryTrafficDlg::DoDataExchange(CDataExchange* pDX)
 {
     CBaseDialog::DoDataExchange(pDX);
     DDX_Control(pDX, IDC_TAB1, m_tab);
+    DDX_Control(pDX, IDC_SCOPE_FILTER, m_filter);
 }
 
 void CHistoryTrafficDlg::SetTabWndSize()
@@ -51,6 +53,7 @@ void CHistoryTrafficDlg::SetTabWndSize()
 BEGIN_MESSAGE_MAP(CHistoryTrafficDlg, CBaseDialog)
     ON_WM_GETMINMAXINFO()
     ON_NOTIFY(TCN_SELCHANGE, IDC_TAB1, &CHistoryTrafficDlg::OnTcnSelchangeTab1)
+    ON_CBN_SELCHANGE(IDC_SCOPE_FILTER, &CHistoryTrafficDlg::OnScopeChanged)
     ON_WM_SIZE()
 END_MESSAGE_MAP()
 
@@ -66,6 +69,10 @@ BOOL CHistoryTrafficDlg::OnInitDialog()
     SetIcon(theApp.GetMenuIcon(IDI_STATISTICS), FALSE);		// 设置小图标
 
     //插入标签
+    m_filter.AddString(CCommon::LoadText(L"IDS_SCOPE_ALL"));
+    m_filter.AddString(CCommon::LoadText(L"IDS_SCOPE_LAN"));
+    m_filter.AddString(CCommon::LoadText(L"IDS_SCOPE_WAN"));
+    m_filter.SetCurSel(0);
     m_tab.InsertItem(0, CCommon::LoadText(IDS_LIST_VIEW));
     m_tab.InsertItem(1, CCommon::LoadText(IDS_CALENDAR_VIEW));
     //创建子对话框
@@ -130,6 +137,32 @@ void CHistoryTrafficDlg::OnTcnSelchangeTab1(NMHDR* pNMHDR, LRESULT* pResult)
     *pResult = 0;
 }
 
+
+void CHistoryTrafficDlg::OnScopeChanged()
+{
+    const int scope = m_filter.GetCurSel();
+    m_filtered.clear();
+    for (auto record : m_source)
+    {
+        if (scope != 0)
+        {
+            if (!record.hasScope)
+                continue;
+            record.up_kBytes = (scope == 1 ? record.scope.lanUp : record.scope.wanUp) / 1024;
+            record.down_kBytes = (scope == 1 ? record.scope.lanDown : record.scope.wanDown) / 1024;
+            record.mixed = false;
+        }
+        m_filtered.push_back(record);
+    }
+    CString status;
+    if (scope != 0)
+        status = m_captureActive
+            ? CCommon::LoadText(L"IDS_SCOPE_COVERAGE")
+            : CCommon::LoadText(L"IDS_SCOPE_OFFLINE");
+    SetDlgItemText(IDC_SCOPE_STATUS, status);
+    m_tab1_dlg.ShowListData();
+    m_tab2_dlg.MonthSelectChanged();
+}
 
 void CHistoryTrafficDlg::OnSize(UINT nType, int cx, int cy)
 {

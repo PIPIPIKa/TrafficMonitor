@@ -12,7 +12,7 @@ class CHistoryTrafficDlg : public CBaseDialog
     DECLARE_DYNAMIC(CHistoryTrafficDlg)
 
 public:
-    CHistoryTrafficDlg(deque<HistoryTraffic>& history_traffics, CWnd* pParent = NULL);   // 标准构造函数
+    CHistoryTrafficDlg(const deque<HistoryTraffic>& history_traffics, bool captureActive, CWnd* pParent = NULL);   // 标准构造函数
     virtual ~CHistoryTrafficDlg();
 
     // 对话框数据
@@ -20,15 +20,21 @@ public:
     enum { IDD = IDD_HISTORY_TRAFFIC_DIALOG };
 #endif
 
+private:
+    const deque<HistoryTraffic>& m_source;
+    deque<HistoryTraffic> m_filtered;
+    bool m_captureActive;
+    CComboBox m_filter;
+    afx_msg void OnScopeChanged();
 public:
     CHistoryTrafficListDlg m_tab1_dlg;
     CHistoryTrafficCalendarDlg m_tab2_dlg;
 
 protected:
-    deque<HistoryTraffic>& m_history_traffics;
+
 
     CTabCtrl m_tab;
-    int m_tab_selected;
+    int m_tab_selected{};
 
 protected:
     virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV 支持

@@ -452,6 +452,8 @@
 #define ID_SELECT_ALL_CONNECTION        33142
 #define ID_SELETE_CONNECTION_MAX        33398
 #define ID_PLUGIN_DETAIL                33399
+#define IDC_SCOPE_FILTER                1221
+#define IDC_SCOPE_STATUS                1222
 #define ID_PLUGIN_OPTIONS               33400
 #define ID_PLUGIN_DISABLE               33401
 #define ID_SHOW_TOTAL_SPEED             33402
@@ -470,7 +472,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        349
 #define _APS_NEXT_COMMAND_VALUE         33666
-#define _APS_NEXT_CONTROL_VALUE         1221
+#define _APS_NEXT_CONTROL_VALUE         1223
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

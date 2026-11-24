@@ -6,6 +6,8 @@
 #pragma comment (lib, "iphlpapi.lib")
 
 #include "NetworkInfoDlg.h"
+#include "ScopeCapture.h"
+#include <mutex>
 #include "afxwin.h"
 #include "StaticEx.h"
 #include "Common.h"
@@ -117,6 +119,8 @@ protected:
     int m_skin_selected{};      //选择的皮肤序号
 
     SYSTEMTIME m_start_time;    //程序启动时的时间
+    ScopeCapture m_scope_capture;
+    std::recursive_mutex m_history_mutex;
     CHistoryTrafficFile m_history_traffic{ theApp.m_history_traffic_path }; //储存历史流量
 
     CToolTipCtrl m_tool_tips;

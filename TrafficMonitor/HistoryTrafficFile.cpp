@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "HistoryTrafficFile.h"
 #include "Common.h"
+#include <sstream>
 
 CHistoryTrafficFile::CHistoryTrafficFile(const wstring& file_path)
 	: m_file_path(file_path)
@@ -38,7 +39,11 @@ void CHistoryTrafficFile::WriteTrafficRecord(ofstream& file, const HistoryTraffi
 		sprintf_s(buff, "%.4d/%.2d/%.2d %llu/%llu", traffic.year, traffic.month, 
 			traffic.day, traffic.up_kBytes, traffic.down_kBytes);
 	}
-	file << buff << "\n";
+	file << buff;
+	if (traffic.hasScope)
+		file << " scope1 " << traffic.scope.lanUp << ' ' << traffic.scope.lanDown
+		     << ' ' << traffic.scope.wanUp << ' ' << traffic.scope.wanDown;
+	file << "\n";
 }
 
 void CHistoryTrafficFile::UpdateCache() const
@@ -52,7 +57,8 @@ void CHistoryTrafficFile::UpdateCache() const
 
 void CHistoryTrafficFile::Save() const
 {
-	ofstream file{ m_file_path };
+	const auto temporary = m_file_path + L".tmp";
+	ofstream file{ temporary };
 	if (!file.is_open())
 	{
 		return;
@@ -75,6 +81,9 @@ void CHistoryTrafficFile::Save() const
 	}
 
 	file.close();
+	if (file && MoveFileExW(temporary.c_str(), m_file_path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+		return;
+	DeleteFileW(temporary.c_str());
 }
 
 bool CHistoryTrafficFile::IsTodayRecord() const
@@ -86,68 +95,6 @@ bool CHistoryTrafficFile::IsTodayRecord() const
 	return (m_today_traffic.year == current_time.wYear &&
 			m_today_traffic.month == current_time.wMonth &&
 			m_today_traffic.day == current_time.wDay);
-}
-
-void CHistoryTrafficFile::SaveTodayOnly() const
-{
-	// 增量保存：只更新第一行（lines计数）和第二行（今天的记录）
-	// 前提：今天的记录日期正确（程序自己维护，无需读取文件判断）
-	
-	// 如果今天的记录日期不正确，说明日期刚改变，使用完整保存
-	if (!IsTodayRecord())
-	{
-		Save();
-		return;
-	}
-
-	// 文件不存在时，使用完整保存（首次保存）
-	if (!CCommon::FileExist(m_file_path.c_str()))
-	{
-		Save();
-		return;
-	}
-
-	// 读取文件剩余行（第3行及之后），用于增量更新
-	vector<string> remaining_lines;
-	ifstream in_file{ m_file_path };
-	if (in_file.is_open())
-	{
-		string line;
-		int line_num = 0;
-		while (std::getline(in_file, line))
-		{
-			line_num++;
-			if (line_num > 2) // 跳过前两行
-			{
-				remaining_lines.push_back(line);
-			}
-		}
-		in_file.close();
-	}
-
-	// 写入更新后的文件
-	ofstream out_file{ m_file_path };
-	if (!out_file.is_open())
-	{
-		return;
-	}
-
-	// 第一行：lines计数（今天的记录 + 历史记录）
-	size_t total_size = 1 + m_history_traffics.size();
-	char buff[64];
-	sprintf_s(buff, "lines: \"%u\"", static_cast<unsigned int>(total_size));
-	out_file << buff << "\n";
-
-	// 第二行：今天的记录
-	WriteTrafficRecord(out_file, m_today_traffic);
-
-	// 剩余行：从文件读取，直接写入（不格式化）
-	for (const auto& line : remaining_lines)
-	{
-		out_file << line << "\n";
-	}
-
-	out_file.close();
 }
 
 void CHistoryTrafficFile::Load()
@@ -193,6 +140,18 @@ void CHistoryTrafficFile::Load()
 				continue;
 			}
 
+			traffic.scope = {};
+			traffic.hasScope = false;
+			const auto extra = current_line.find(" scope1 ", 11);
+			if (extra != string::npos)
+			{
+				std::istringstream fields(current_line.substr(extra + 8));
+				auto& s = traffic.scope;
+				traffic.hasScope = static_cast<bool>(fields >> s.lanUp >> s.lanDown >> s.wanUp >> s.wanDown);
+				if (!traffic.hasScope)
+					s = {};
+				current_line.resize(extra);
+			}
 			size_t separator_index = current_line.find(L'/', 11);
 			traffic.mixed = (separator_index == wstring::npos);
 			if (traffic.mixed)
@@ -209,7 +168,7 @@ void CHistoryTrafficFile::Load()
 				traffic.down_kBytes = atoll(temp.c_str());
 			}
 			
-			if (traffic.year > 0 && traffic.month > 0 && traffic.day > 0 && traffic.kBytes() > 0)
+			if (traffic.year > 0 && traffic.month > 0 && traffic.day > 0 && (traffic.kBytes() > 0 || traffic.hasScope))
 			{
 				if (is_first_data_line)
 				{
@@ -257,6 +216,13 @@ void CHistoryTrafficFile::Merge(const CHistoryTrafficFile& history_traffic, bool
 	{
 		if (ignore_same_data)
 		{
+			const auto& s = history_traffic.m_today_traffic.scope;
+			auto& d = m_today_traffic.scope;
+			d.lanUp = (std::max)(s.lanUp, d.lanUp);
+			d.lanDown = (std::max)(s.lanDown, d.lanDown);
+			d.wanUp = (std::max)(s.wanUp, d.wanUp);
+			d.wanDown = (std::max)(s.wanDown, d.wanDown);
+			m_today_traffic.hasScope |= history_traffic.m_today_traffic.hasScope;
 			// 从备份恢复时，取较大的值（避免重复累加）
 			// 备份文件通常是程序退出时的完整数据，当前文件可能是程序启动后的不完整数据
 			if (history_traffic.m_today_traffic.up_kBytes > m_today_traffic.up_kBytes)
@@ -271,6 +237,8 @@ void CHistoryTrafficFile::Merge(const CHistoryTrafficFile& history_traffic, bool
 		else
 		{
 			// 正常合并时，累加数据
+			m_today_traffic.scope.add(history_traffic.m_today_traffic.scope);
+			m_today_traffic.hasScope |= history_traffic.m_today_traffic.hasScope;
 			m_today_traffic.up_kBytes += history_traffic.m_today_traffic.up_kBytes;
 			m_today_traffic.down_kBytes += history_traffic.m_today_traffic.down_kBytes;
 		}
@@ -294,6 +262,11 @@ void CHistoryTrafficFile::Merge(const CHistoryTrafficFile& history_traffic, bool
 				});
 			if (it != m_history_traffics.end())
 			{
+				if (!it->hasScope && traffic.hasScope)
+				{
+					it->scope = traffic.scope;
+					it->hasScope = true;
+				}
 				continue; // 找到相同日期的记录，跳过
 			}
 		}
@@ -309,7 +282,7 @@ void CHistoryTrafficFile::OnDateChanged()
 	// 日期改变时，将今天的记录移到历史记录链表的前面，然后创建新的今天的记录
 	
 	// 如果今天的记录有数据，将其移到历史记录链表
-	if (m_today_traffic.kBytes() > 0)
+	if (m_today_traffic.kBytes() > 0 || m_today_traffic.hasScope)
 	{
 		m_history_traffics.push_front(m_today_traffic);
 		// 立即排序，确保数据一致性（按日期从大到小）
@@ -346,6 +319,8 @@ void CHistoryTrafficFile::MormalizeData()
 			++next_it;
 			if (next_it != m_history_traffics.end() && HistoryTraffic::DateEqual(*it, *next_it))
 			{
+				it->scope.add(next_it->scope);
+				it->hasScope |= next_it->hasScope;
 				it->up_kBytes += next_it->up_kBytes;
 				it->down_kBytes += next_it->down_kBytes;
 				m_history_traffics.erase(next_it);
@@ -396,6 +371,8 @@ void CHistoryTrafficFile::MormalizeData()
 		if (HistoryTraffic::DateEqual(m_today_traffic, today_traffic))
 		{
 			// 如果 m_today_traffic 也是今天的，合并数据（避免数据丢失）
+			m_today_traffic.scope.add(it->scope);
+			m_today_traffic.hasScope |= it->hasScope;
 			m_today_traffic.up_kBytes += it->up_kBytes;
 			m_today_traffic.down_kBytes += it->down_kBytes;
 		}
@@ -411,7 +388,7 @@ void CHistoryTrafficFile::MormalizeData()
 	{
 		// 历史记录中没有今天的记录，且 m_today_traffic 也不是今天的
 		// 如果 m_today_traffic 有数据，应该将其移到历史记录链表
-		if (m_today_traffic.kBytes() > 0)
+		if (m_today_traffic.kBytes() > 0 || m_today_traffic.hasScope)
 		{
 			m_history_traffics.push_front(m_today_traffic);
 			// 重新排序（因为插入了新记录）

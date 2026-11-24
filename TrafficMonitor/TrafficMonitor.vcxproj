@@ -813,6 +813,8 @@
     <ClInclude Include="CSkinPreviewView.h" />
     <ClInclude Include="DrawCommon.h" />
     <ClInclude Include="GeneralSettingsDlg.h" />
+    <ClInclude Include="ScopeCapture.h" />
+    <ClInclude Include="TrafficScope.h" />
     <ClInclude Include="HistoryTrafficDlg.h" />
     <ClInclude Include="IconSelectDlg.h" />
     <ClInclude Include="IniHelper.h" />
@@ -913,6 +915,9 @@
     <ClCompile Include="CSkinPreviewView.cpp" />
     <ClCompile Include="DrawCommon.cpp" />
     <ClCompile Include="GeneralSettingsDlg.cpp" />
+    <ClCompile Include="ScopeCapture.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="HistoryTrafficDlg.cpp" />
     <ClCompile Include="IconSelectDlg.cpp" />
     <ClCompile Include="IniHelper.cpp" />

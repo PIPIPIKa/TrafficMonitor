@@ -1,6 +1,7 @@
 ﻿//此文件包含全局结构体、枚举类型的定义
 #pragma once
 #include "stdafx.h"
+#include "TrafficScope.h"
 #include "TaskbarItemOrderHelper.h"
 
 struct Date
@@ -22,6 +23,8 @@ struct Date
 //储存某一天的历史流量
 struct HistoryTraffic : public Date
 {
+    traffic_scope::Counts scope; // Bytes, including fractions of the displayed KiB.
+    bool hasScope{};
     //当天使用的流量（以KB为单位）
     unsigned __int64 up_kBytes{};
     unsigned __int64 down_kBytes{};

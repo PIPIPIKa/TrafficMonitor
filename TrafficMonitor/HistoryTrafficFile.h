@@ -7,7 +7,7 @@ public:
 	~CHistoryTrafficFile();
 
 	void Save() const;
-	void SaveTodayOnly() const;	// 仅更新第一行（lines计数）和今天的记录（第二行），用于频繁保存时减少I/O
+
 	void Load();
 	void LoadSize();			//仅读取文件的大小
 	void Merge(const CHistoryTrafficFile& history_traffic, bool ignore_same_data = false);		//合并另一个CHistoryTrafficFile对象。如果ignore_same_data为true，则忽略相同日期的项，否则将相同日期的流量数据相加
@@ -21,7 +21,7 @@ public:
 	const deque<HistoryTraffic>& GetTraffics() const { if (m_cache_dirty) UpdateCache(); return m_traffics_cache; }
 	
 	// 获取今天的记录（第一条）
-	HistoryTraffic& GetTodayTraffic() { return m_today_traffic; }
+	HistoryTraffic& GetTodayTraffic() { InvalidateCache(); return m_today_traffic; }
 	const HistoryTraffic& GetTodayTraffic() const { return m_today_traffic; }
 	
 	// 获取历史记录链表

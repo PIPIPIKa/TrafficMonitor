@@ -693,12 +693,13 @@ void CTrafficMonitorDlg::UpdateNotifyIconTip()
 void CTrafficMonitorDlg::SaveHistoryTraffic()
 {
     // 使用增量保存，只更新第一行和今天的记录，减少I/O操作
-    m_history_traffic.SaveTodayOnly();
+    SaveHistoryTrafficFull();
 }
 
 void CTrafficMonitorDlg::SaveHistoryTrafficFull()
 {
     // 完整保存，用于程序退出时确保所有数据都保存
+    std::lock_guard<std::recursive_mutex> lock(m_history_mutex);
     m_history_traffic.Save();
 }
 
@@ -1224,10 +1225,12 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
     };
 
     getLfTable();
+    std::set<unsigned long> scope_indexes;
 
     if (!theApp.m_cfg_data.m_select_all)        //获取当前选中连接的网速
     {
         auto table = GetConnectIfTable(m_connection_selected);
+        scope_indexes.insert(table.dwIndex);
         m_in_bytes = table.dwInOctets;
         m_out_bytes = table.dwOutOctets;
     }
@@ -1241,6 +1244,7 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
             //if (i > 0 && m_pIfTable->table[m_connections[i].index].dwInOctets == m_pIfTable->table[m_connections[i - 1].index].dwInOctets
             //  && m_pIfTable->table[m_connections[i].index].dwOutOctets == m_pIfTable->table[m_connections[i - 1].index].dwOutOctets)
             //  continue;       //连接列表中可能会有相同的连接，统计所有连接的网速时，忽略掉已发送和已接收字节数完全相同的连接
+            scope_indexes.insert(table.dwIndex);
             m_in_bytes += table.dwInOctets;
             m_out_bytes += table.dwOutOctets;
         }
@@ -1298,50 +1302,59 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
     }
 
     //检测当前日期是否改变，如果已改变，就向历史流量列表插入一个新的日期
-    SYSTEMTIME current_time;
-    GetLocalTime(&current_time);
-    static int last_check_day = -1;  //用于检测日期变化，重置保存状态
-    if (m_history_traffic.GetTodayTraffic().day != current_time.wDay)
+    const auto classified = m_scope_capture.sample(scope_indexes, theApp.m_cfg_data.m_select_all);
     {
-        m_history_traffic.OnDateChanged();
-        theApp.m_today_up_traffic = 0;
-        theApp.m_today_down_traffic = 0;
-        last_check_day = -1;  //重置日期标记，下次检查时会重新初始化保存状态
-    }
+        std::lock_guard<std::recursive_mutex> lock(m_history_mutex);
+        SYSTEMTIME current_time;
+        GetLocalTime(&current_time);
+        static int last_check_day = -1;  //用于检测日期变化，重置保存状态
+        const auto& day = m_history_traffic.GetTodayTraffic();
+        if (day.year != current_time.wYear || day.month != current_time.wMonth || day.day != current_time.wDay)
+        {
+            m_history_traffic.OnDateChanged();
+            SaveHistoryTrafficFull();
+            theApp.m_today_up_traffic = 0;
+            theApp.m_today_down_traffic = 0;
+            last_check_day = -1;  //重置日期标记，下次检查时会重新初始化保存状态
+        }
 
-    //统计今天已使用的流量
-    theApp.m_today_up_traffic += cur_out_speed;
-    theApp.m_today_down_traffic += cur_in_speed;
-    m_history_traffic.GetTodayTraffic().up_kBytes = theApp.m_today_up_traffic / 1024u;
-    m_history_traffic.GetTodayTraffic().down_kBytes = theApp.m_today_down_traffic / 1024u;
-    //每隔30秒保存一次流量历史记录
-    if (m_monitor_time_cnt % GetMonitorTimerCount(30) == GetMonitorTimerCount(30) - 1)
-    {
-        static unsigned __int64 last_today_kbytes = 0;
-        static bool last_today_kbytes_initialized = false;
-        unsigned __int64 current_kbytes = m_history_traffic.GetTodayTraffic().kBytes();
-        
-        //如果日期改变了，重置初始化状态
-        if (last_check_day != current_time.wDay)
+        //统计今天已使用的流量
+        auto& today = m_history_traffic.GetTodayTraffic();
+        today.scope.add(classified);
+        today.hasScope |= m_scope_capture.active() || classified.lanUp || classified.lanDown || classified.wanUp || classified.wanDown;
+        theApp.m_today_up_traffic += cur_out_speed;
+        theApp.m_today_down_traffic += cur_in_speed;
+        m_history_traffic.GetTodayTraffic().up_kBytes = theApp.m_today_up_traffic / 1024u;
+        m_history_traffic.GetTodayTraffic().down_kBytes = theApp.m_today_down_traffic / 1024u;
+        //每隔30秒保存一次流量历史记录
+        if (m_monitor_time_cnt % GetMonitorTimerCount(30) == GetMonitorTimerCount(30) - 1)
         {
-            last_today_kbytes_initialized = false;
-            last_check_day = current_time.wDay;
-        }
-        
-        //首次检查时初始化，不保存
-        if (!last_today_kbytes_initialized)
-        {
-            last_today_kbytes = current_kbytes;
-            last_today_kbytes_initialized = true;
-        }
-        else
-        {
-            //只有当30秒内流量变化超过10MB时才保存历史流量记录，防止磁盘写入过于频繁
-            unsigned __int64 change_kbytes = current_kbytes - last_today_kbytes;
-            if (change_kbytes >= 10240u) // 10MB = 10240KB
+            static unsigned __int64 last_today_kbytes = 0;
+            static bool last_today_kbytes_initialized = false;
+            unsigned __int64 current_kbytes = m_history_traffic.GetTodayTraffic().kBytes();
+
+            //如果日期改变了，重置初始化状态
+            if (last_check_day != current_time.wDay)
             {
-                SaveHistoryTraffic();
+                last_today_kbytes_initialized = false;
+                last_check_day = current_time.wDay;
+            }
+
+            //首次检查时初始化，不保存
+            if (!last_today_kbytes_initialized)
+            {
                 last_today_kbytes = current_kbytes;
+                last_today_kbytes_initialized = true;
+            }
+            else
+            {
+                //只有当30秒内流量变化超过10MB时才保存历史流量记录，防止磁盘写入过于频繁
+                unsigned __int64 change_kbytes = current_kbytes - last_today_kbytes;
+                if (change_kbytes >= 10240u) // 10MB = 10240KB
+                {
+                    SaveHistoryTraffic();
+                    last_today_kbytes = current_kbytes;
+                }
             }
         }
     }
@@ -2651,7 +2664,12 @@ void CTrafficMonitorDlg::OnChangeSkin()
 void CTrafficMonitorDlg::OnTrafficHistory()
 {
     // TODO: 在此添加命令处理程序代码
-    CHistoryTrafficDlg historyDlg(m_history_traffic.GetTraffics());
+    deque<HistoryTraffic> snapshot;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_history_mutex);
+        snapshot = m_history_traffic.GetTraffics();
+    }
+    CHistoryTrafficDlg historyDlg(snapshot, m_scope_capture.active());
     historyDlg.DoModal();
 }
 
