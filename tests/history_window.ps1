@@ -1,15 +1,25 @@
-param([Parameter(Mandatory)][string]$Executable)
+param([Parameter(Mandatory)][string]$Executable, [string]$LiveAdapter,
+      [string]$FixtureRoot = (Get-Location).Path)
 $ErrorActionPreference = 'Stop'
 if (Get-Process -Name TrafficMonitor -ErrorAction SilentlyContinue) {
     throw 'This test requires an isolated Windows session.'
 }
 $exe = (Resolve-Path -LiteralPath $Executable).Path
-$dir = Join-Path ([IO.Path]::GetTempPath()) ('tm-history-' + [guid]::NewGuid())
+# TrafficMonitor forces AppData mode when installed in the Windows temp folder.
+$base = (Resolve-Path -LiteralPath $FixtureRoot).Path
+$temp = [IO.Path]::GetTempPath().TrimEnd('\') + '\'
+if (($base.TrimEnd('\') + '\').StartsWith($temp,[StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Choose a fixture directory outside the Windows temp folder for portable mode.'
+}
+$dir = Join-Path $base ('tm-history-' + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $dir | Out-Null
 Copy-Item -LiteralPath $exe -Destination $dir
 Get-ChildItem -LiteralPath (Split-Path $exe) -Filter '*.dll' | Copy-Item -Destination $dir
 Set-Content (Join-Path $dir global_cfg.ini) "[config]`nportable_mode = true" -Encoding ascii
 Set-Content (Join-Path $dir config.ini) "[general]`ncheck_update_when_start = false" -Encoding ascii
+if ($LiveAdapter) {
+    Add-Content (Join-Path $dir config.ini) "[connection]`nauto_select = false`nselect_all = false`nconnection_name = $LiveAdapter" -Encoding utf8
+}
 $day = [datetime]::Today.AddDays(-1).ToString('yyyy/MM/dd', [cultureinfo]::InvariantCulture)
 $old = [datetime]::Today.AddDays(-2).ToString('yyyy/MM/dd', [cultureinfo]::InvariantCulture)
 $recent = "$day 4096/6144 scope1 1048576 2097152 3145728 4194304"
@@ -63,6 +73,20 @@ function Wait-ForHandle([scriptblock]$Query) {
 }
 $process=Start-Process -FilePath (Join-Path $dir TrafficMonitor.exe) -WorkingDirectory $dir -WindowStyle Hidden -PassThru
 try {
+    if ($LiveAdapter) {
+        # Exercise the first lock taken by the Npcap worker on a real interface.
+        $until = [datetime]::UtcNow.AddSeconds(15)
+        while ([datetime]::UtcNow -lt $until) {
+            Start-Sleep -Milliseconds 500
+            $log = Join-Path $dir error.log
+            if ((Test-Path $log) -and (Select-String -LiteralPath $log -Pattern 'Stack trace:' -Quiet)) {
+                throw "Application recorded a crash during capture. Fixture: $dir"
+            }
+            if ($process.HasExited) { throw "Application exited during capture: $($process.ExitCode)" }
+        }
+        $runtime = @($process.Modules | Where-Object ModuleName -eq 'msvcp140.dll')
+        Write-Host "Live capture runtime: $($runtime.FileVersionInfo.FileVersion)"
+    }
     $main = Wait-ForHandle { [HistoryWindow]::Find($process.Id,$false) }
     [void][HistoryWindow]::PostMessage($main,0x111,32826,0)
     $dlg = Wait-ForHandle { [HistoryWindow]::Find($process.Id,$true) }
@@ -92,6 +116,16 @@ try {
     $saved = @(Get-Content -LiteralPath $history)
     if($saved -notcontains $recent -or $saved -notcontains "$old 1000/2000"){
         throw 'History round trip lost classified bytes or legacy totals'
+    }
+    if ($LiveAdapter) {
+        $today = [datetime]::Today.ToString('yyyy/MM/dd', [cultureinfo]::InvariantCulture)
+        $row = @($saved | Where-Object { $_.StartsWith("$today ") })
+        if ($row.Count -ne 1 -or $row[0] -notmatch ' scope1 (\d+) (\d+) (\d+) (\d+)$') {
+            throw 'Live adapter did not produce a classified record'
+        }
+        $bytes = @(1..4 | ForEach-Object { [uint64]$Matches[$_] })
+        if (($bytes | Measure-Object -Sum).Sum -le 0) { throw 'No classified traffic was recorded' }
+        Write-Host "Captured LAN up/down, Internet up/down bytes: $bytes"
     }
     Write-Host 'Calendar scope switches and history round trip passed'
 } finally {

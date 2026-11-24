@@ -11,3 +11,10 @@
 
 IPv4、IPv6、VLAN、广播、截断包与直连 IPv6 前缀的 C++ 分类回归测试通过。Windows 本机实际加载 Npcap 后，物理以太网采集到了内外网两个方向的四项非零字节计数。GitHub Windows x64 的实际窗口测试验证了旧历史只出现在“全部”，切换三种范围后再回到“全部”能恢复原来的日期列表。
 - 发布候选构建源码为 6841f80。Windows x64 实际窗口验证“全部、内网、公网、全部”的日期行数为 3、1、1、3，日历视图逐项切换通过。应用正常退出后，旧格式总量与四项分类字节值均逐行核对通过。[Windows 构建和测试](https://github.com/PIPIPIKa/TrafficMonitor/actions/runs/45317039321)
+## 旧运行库上的启动回归
+
+在 Windows 10 x64、系统 MSVCP140.dll 14.36.32532.0 和真实 Npcap 适配器上复现了旧标准版的空指针读取。出错时，采集线程在处理第一批记录后调用 _Mtx_lock，应用内返回地址为 RVA 0x31FE7。对应旧 EXE 导入了 _Mtx_lock，没有导入 _Mtx_init_in_situ。由 v143 的新 STL 头文件构建的默认 mutex 初始化方式不适用于此处的旧动态运行库。
+
+修复提交 22432c0 在整个应用编译单元中启用微软提供的 _DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR，包括预编译头和独立采集代码。新版标准版和 Lite 均导入运行库的 _Mtx_init_in_situ。使用相同运行库、适配器和独立便携配置，旧版失败，两种修复版均完成四方向流量采集、列表及日历切换、正常退出和历史数据保存。
+
+复测时关闭其他 TrafficMonitor 实例，在具有实时网络流量的 Windows 主机上运行 tests/history_window.ps1，传入 -Executable、-LiveAdapter 和非 Windows Temp 目录的 -FixtureRoot。标准版测试需要管理员权限。[修复构建](https://github.com/PIPIPIKa/TrafficMonitor/actions/runs/45318067615)
