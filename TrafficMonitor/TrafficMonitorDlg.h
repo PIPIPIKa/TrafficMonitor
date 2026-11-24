@@ -120,7 +120,7 @@ protected:
 
     SYSTEMTIME m_start_time;    //程序启动时的时间
     ScopeCapture m_scope_capture;
-    std::recursive_mutex m_history_mutex;
+    std::mutex m_history_mutex;
     CHistoryTrafficFile m_history_traffic{ theApp.m_history_traffic_path }; //储存历史流量
 
     CToolTipCtrl m_tool_tips;
@@ -175,7 +175,6 @@ public:
 protected:
     void UpdateNotifyIconTip();     //更新通知区图标的鼠标提示
 
-    void SaveHistoryTraffic();        // 增量保存，只更新第一行和今天的记录
     void SaveHistoryTrafficFull();    // 完整保存，用于程序退出时确保所有数据都保存
     void LoadHistoryTraffic();
     void BackupHistoryTrafficFile();

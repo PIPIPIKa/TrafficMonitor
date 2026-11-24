@@ -86,17 +86,6 @@ void CHistoryTrafficFile::Save() const
 	DeleteFileW(temporary.c_str());
 }
 
-bool CHistoryTrafficFile::IsTodayRecord() const
-{
-	// 检查今天的记录日期是否正确
-	SYSTEMTIME current_time;
-	GetLocalTime(&current_time);
-	
-	return (m_today_traffic.year == current_time.wYear &&
-			m_today_traffic.month == current_time.wMonth &&
-			m_today_traffic.day == current_time.wDay);
-}
-
 void CHistoryTrafficFile::Load()
 {
 	m_today_traffic = HistoryTraffic{}; // 初始化今天的记录
@@ -113,9 +102,8 @@ void CHistoryTrafficFile::Load()
 		// 跳过第一行（lines:）
 		std::getline(file, current_line);
 		
-		while (!file.eof())
+		while (std::getline(file, current_line))
 		{
-			std::getline(file, current_line);
 
 			if (current_line.size() < 12)
 			{

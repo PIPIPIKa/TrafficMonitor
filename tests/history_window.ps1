@@ -12,7 +12,7 @@ Set-Content (Join-Path $dir global_cfg.ini) "[config]`nportable_mode = true" -En
 Set-Content (Join-Path $dir config.ini) "[general]`ncheck_update_when_start = false" -Encoding ascii
 $day = [datetime]::Today.AddDays(-1).ToString('yyyy/MM/dd', [cultureinfo]::InvariantCulture)
 $old = [datetime]::Today.AddDays(-2).ToString('yyyy/MM/dd', [cultureinfo]::InvariantCulture)
-$recent = "$day 2048/4096 scope1 1048576 2097152 1048576 2097152"
+$recent = "$day 4096/6144 scope1 1048576 2097152 3145728 4194304"
 $history = Join-Path $dir history_traffic.dat
 Set-Content $history @('lines: "2"', $recent, "$old 1000/2000") -Encoding ascii
 
@@ -28,6 +28,7 @@ public static class HistoryWindow {
     [DllImport("user32",CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hwnd,StringBuilder name,int len);
     [DllImport("user32")] static extern int GetDlgCtrlID(IntPtr hwnd);
     [DllImport("user32")] public static extern IntPtr GetDlgItem(IntPtr hwnd, int id);
+    [DllImport("user32")] public static extern bool IsWindowVisible(IntPtr hwnd);
     [DllImport("user32")] public static extern bool PostMessage(IntPtr hwnd,int msg,IntPtr wp,IntPtr lp);
     [DllImport("user32")] public static extern IntPtr SendMessage(IntPtr hwnd,int msg,IntPtr wp,IntPtr lp);
     public static IntPtr Find(uint pid, bool dialog) {
@@ -75,8 +76,24 @@ try {
     }
     if($counts[0] -lt 2 -or $counts[1] -lt 1 -or $counts[1] -ge $counts[0] -or
        $counts[2] -ne $counts[1] -or $counts[3] -ne $counts[0]) {throw "Unexpected filter counts: $counts"}
-    [void][HistoryWindow]::PostMessage($dlg,0x111,1,0)
     Write-Host "All, LAN, Internet, All row counts: $counts"
+    $tab = [HistoryWindow]::GetDlgItem($dlg,1035)
+    [void][HistoryWindow]::SendMessage($tab,0x100,0x27,0) # Right arrow selects Calendar
+    $year = [HistoryWindow]::Child($dlg,1077)
+    if (!([HistoryWindow]::IsWindowVisible($year))){throw 'Calendar view is not visible'}
+    foreach($i in @(1,2,0)){
+        [void][HistoryWindow]::SendMessage($filter,0x14e,$i,0)
+        [void][HistoryWindow]::SendMessage($dlg,0x111,([int]0x10000+1221),$filter)
+        if(!([HistoryWindow]::IsWindowVisible($year))){throw 'Scope switch hid calendar'}
+    }
+    [void][HistoryWindow]::SendMessage($dlg,0x111,1,0)
+    [void][HistoryWindow]::PostMessage($main,0x10,0,0) # WM_CLOSE flushes history
+    if(!$process.WaitForExit(15000)){throw 'Application did not close cleanly'}
+    $saved = @(Get-Content -LiteralPath $history)
+    if($saved -notcontains $recent -or $saved -notcontains "$old 1000/2000"){
+        throw 'History round trip lost classified bytes or legacy totals'
+    }
+    Write-Host 'Calendar scope switches and history round trip passed'
 } finally {
     if(!$process.HasExited){$process.Kill(); $process.WaitForExit()}
 }

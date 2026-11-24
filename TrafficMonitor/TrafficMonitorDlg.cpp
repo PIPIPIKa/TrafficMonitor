@@ -690,16 +690,10 @@ void CTrafficMonitorDlg::UpdateNotifyIconTip()
 
 }
 
-void CTrafficMonitorDlg::SaveHistoryTraffic()
-{
-    // 使用增量保存，只更新第一行和今天的记录，减少I/O操作
-    SaveHistoryTrafficFull();
-}
-
 void CTrafficMonitorDlg::SaveHistoryTrafficFull()
 {
     // 完整保存，用于程序退出时确保所有数据都保存
-    std::lock_guard<std::recursive_mutex> lock(m_history_mutex);
+    std::lock_guard<std::mutex> lock(m_history_mutex);
     m_history_traffic.Save();
 }
 
@@ -1304,7 +1298,7 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
     //检测当前日期是否改变，如果已改变，就向历史流量列表插入一个新的日期
     const auto classified = m_scope_capture.sample(scope_indexes, theApp.m_cfg_data.m_select_all);
     {
-        std::lock_guard<std::recursive_mutex> lock(m_history_mutex);
+        std::lock_guard<std::mutex> lock(m_history_mutex);
         SYSTEMTIME current_time;
         GetLocalTime(&current_time);
         static int last_check_day = -1;  //用于检测日期变化，重置保存状态
@@ -1312,7 +1306,7 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
         if (day.year != current_time.wYear || day.month != current_time.wMonth || day.day != current_time.wDay)
         {
             m_history_traffic.OnDateChanged();
-            SaveHistoryTrafficFull();
+            m_history_traffic.Save();
             theApp.m_today_up_traffic = 0;
             theApp.m_today_down_traffic = 0;
             last_check_day = -1;  //重置日期标记，下次检查时会重新初始化保存状态
@@ -1352,7 +1346,7 @@ void CTrafficMonitorDlg::DoMonitorAcquisition()
                 unsigned __int64 change_kbytes = current_kbytes - last_today_kbytes;
                 if (change_kbytes >= 10240u) // 10MB = 10240KB
                 {
-                    SaveHistoryTraffic();
+                    m_history_traffic.Save();
                     last_today_kbytes = current_kbytes;
                 }
             }
@@ -2666,7 +2660,7 @@ void CTrafficMonitorDlg::OnTrafficHistory()
     // TODO: 在此添加命令处理程序代码
     deque<HistoryTraffic> snapshot;
     {
-        std::lock_guard<std::recursive_mutex> lock(m_history_mutex);
+        std::lock_guard<std::mutex> lock(m_history_mutex);
         snapshot = m_history_traffic.GetTraffics();
     }
     CHistoryTrafficDlg historyDlg(snapshot, m_scope_capture.active());

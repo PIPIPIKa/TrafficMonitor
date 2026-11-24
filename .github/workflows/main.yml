@@ -43,6 +43,19 @@ jobs:
       shell: pwsh
       run: ./tests/history_window.ps1 -Executable "Bin/x64/Release (lite)/TrafficMonitor.exe"
 
+    - name: Build x64 standard edition
+      run: msbuild TrafficMonitor.sln -p:configuration=Release -p:platform=x64 -p:platformToolset=v143
+
+    - name: Upload x64 standard edition
+      uses: actions/upload-artifact@v4
+      with:
+        name: x64_standard_TrafficMonitor
+        path: |
+          Bin/x64/Release/TrafficMonitor.exe
+          Bin/x64/Release/OpenHardwareMonitorApi.dll
+          Bin/x64/Release/LibreHardwareMonitorLib.dll
+        if-no-files-found: error
+
   x86_build:
     runs-on: windows-2022
 
