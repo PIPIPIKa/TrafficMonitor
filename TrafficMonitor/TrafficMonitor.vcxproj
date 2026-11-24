@@ -273,6 +273,13 @@
     <IncludePath>$(ProjectDir);$(ProjectDir)..\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)lib\x64;$(OutDir);$(SolutionDir)Bin\x64\$(Configuration)\;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
+  <!-- Use the runtime mutex initializer on hosts with pre-17.10 VC++ runtimes.
+       This must apply to both the MFC PCH and the standalone capture unit. -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <PrecompiledHeader>Use</PrecompiledHeader>
