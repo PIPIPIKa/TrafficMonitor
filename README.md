@@ -1,5 +1,9 @@
 **简体中文 | [English](./README_en-us.md)**
 
+## 此 fork 的内网和公网统计
+
+打开“历史流量统计”，在窗口左下角切换“全部”“内网”“公网”。同一个选择同时作用于列表和日历。分类需要 Npcap，旧历史保留在“全部”中。定制版可在本仓库的 Windows 构建产物中下载。[Windows 构建](https://github.com/PIPIPIKa/TrafficMonitor/actions/workflows/main.yml) · [统计口径和兼容说明](codeConverRecord/03-execution/traffic-scope.md)
+
 [![Badge](https://img.shields.io/badge/link-996.icu-%23FF4D5B.svg?style=flat-square)](https://996.icu/#/en_US)
 [![LICENSE](https://img.shields.io/badge/license-Anti%20996-blue.svg?style=flat-square)](https://github.com/996icu/996.ICU/blob/master/LICENSE)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/zhongyang219/TrafficMonitor/main.yml?branch=master&label=Release%20CI&logo=github&style=flat-square)](https://github.com/zhongyang219/TrafficMonitor/actions?query=workflow:"Release+CI")

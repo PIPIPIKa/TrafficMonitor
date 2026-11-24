@@ -1,5 +1,9 @@
 **[简体中文](./README.md) | English**
 
+## LAN and Internet history in this fork
+
+Open Historical Traffic Statistics and select All, LAN, or Internet in the lower-left corner. The filter applies to both the list and calendar. Classification requires Npcap. Older records remain available under All. Download this fork's binaries from its [Windows builds](https://github.com/PIPIPIKa/TrafficMonitor/actions/workflows/main.yml).
+
 [![Badge](https://img.shields.io/badge/link-996.icu-%23FF4D5B.svg?style=flat-square)](https://996.icu/#/en_US)
 [![LICENSE](https://img.shields.io/badge/license-Anti%20996-blue.svg?style=flat-square)](https://github.com/996icu/996.ICU/blob/master/LICENSE)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/zhongyang219/TrafficMonitor/main.yml?branch=master&label=Release%20CI&logo=github&style=flat-square)](https://github.com/zhongyang219/TrafficMonitor/actions?query=workflow:"Release+CI")
